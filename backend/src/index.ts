@@ -26,7 +26,7 @@ app.use(cors({
     'http://localhost:8080',  // Your current frontend port
     'http://localhost:5173',  // Default Vite port (for future use)
     FRONTEND_URL,              // From environment variable
-    'https://krishi-log-ai.vercel.app/',
+    'https://krishi-log-ai.vercel.app',
   ].filter(Boolean), // Remove any undefined values
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
