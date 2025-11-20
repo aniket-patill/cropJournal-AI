@@ -189,6 +189,20 @@ async uploadFile<T>(
       { method: 'GET' }
     );
   }
+
+  // Demo Process
+  async demoProcess(data: { text?: string; audio?: File }) {
+    const formData = new FormData();
+    if (data.text) formData.append('text', data.text);
+    if (data.audio) formData.append('audio', data.audio);
+
+    return this.uploadFile<{
+      message: string;
+      extracted_data: any;
+      credits_earned: number;
+      transcription?: string;
+    }>('/api/demo-process', formData);
+  }
 }
 
 export const apiClient = new ApiClient();

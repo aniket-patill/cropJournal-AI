@@ -7,6 +7,11 @@ interface CreditCalculationInput {
   description: string;
 }
 
+interface CreditCalculationOptions {
+  qualityScore?: number;
+  requireFarmingContent?: boolean;
+}
+
 // Base credits for each activity type
 const BASE_CREDITS: Record<ActivityType, number> = {
   organic_input: 50,
@@ -47,7 +52,33 @@ function getAreaMultiplier(area: string | null): number {
   return multiplier;
 }
 
-export function calculateCredits(input: CreditCalculationInput): number {
+export function calculateCredits(
+  input: CreditCalculationInput,
+  options: CreditCalculationOptions = {}
+): number {
+  const { qualityScore, requireFarmingContent = true } = options;
+
+  // Return 0 credits if quality score is too low
+  if (qualityScore !== undefined && qualityScore < 30) {
+    return 0;
+  }
+
+  // Return 0 credits if 'other' type and no quality indicators or low quality
+  // This prevents meaningless content from getting credits
+  if (input.activity_type === 'other') {
+    if (qualityScore === undefined || qualityScore < 50) {
+      // If no quality score provided, still allow but with lower credits
+      // If quality score is provided but low, return 0
+      if (qualityScore !== undefined) {
+        return 0;
+      }
+    }
+    // If 'other' type and requireFarmingContent is true, validate description
+    if (requireFarmingContent && (!input.description || input.description.trim().length < 15)) {
+      return 0;
+    }
+  }
+
   const baseCredits = BASE_CREDITS[input.activity_type] || BASE_CREDITS.other;
 
   // Apply crop multiplier
@@ -65,10 +96,26 @@ export function calculateCredits(input: CreditCalculationInput): number {
   // Apply area multiplier
   const areaMultiplier = getAreaMultiplier(input.area);
 
-  // Calculate final credits (rounded)
-  const credits = Math.round(baseCredits * cropMultiplier * areaMultiplier);
+  // Calculate base credits
+  let credits = baseCredits * cropMultiplier * areaMultiplier;
 
-  // Ensure minimum of 10 credits
-  return Math.max(credits, 10);
+  // Apply quality multiplier if quality score is provided
+  // Quality multiplier ranges from 0.5x (low quality) to 1.5x (high quality)
+  if (qualityScore !== undefined) {
+    const qualityMultiplier = 0.5 + (qualityScore / 100) * 1.0; // Maps 0-100 to 0.5-1.5
+    credits *= qualityMultiplier;
+  }
+
+  // Round final credits
+  credits = Math.round(credits);
+
+  // No minimum guarantee - return 0 if content is invalid
+  // However, ensure legitimate farming activities get at least 5 credits minimum
+  // Only apply minimum if quality score is good or not provided
+  if (credits > 0 && (qualityScore === undefined || qualityScore >= 50)) {
+    return Math.max(credits, 5);
+  }
+
+  return Math.max(credits, 0);
 }
 

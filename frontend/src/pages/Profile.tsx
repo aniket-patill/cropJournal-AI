@@ -136,6 +136,7 @@ export default function Profile() {
                 <SelectContent className="bg-popover">
                   <SelectItem value="en">English</SelectItem>
                   <SelectItem value="kn">Kannada (ಕನ್ನಡ)</SelectItem>
+                  <SelectItem value="mr">Marathi (मराठी)</SelectItem>
                 </SelectContent>
               </Select>
             </div>

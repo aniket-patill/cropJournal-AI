@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Coins, Filter, Mic, Loader2 } from "lucide-react";
+import { Plus, Coins, Filter, Mic, Loader2, Globe } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -47,6 +47,7 @@ export default function Activities() {
     credits_earned: 10,
   });
   const [location, setLocation] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
+  const [userLanguage, setUserLanguage] = useState<string>("en");
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -55,8 +56,20 @@ export default function Activities() {
   useEffect(() => {
     if (user) {
       fetchActivities();
+      fetchUserProfile();
     }
   }, [user]);
+
+  const fetchUserProfile = async () => {
+    try {
+      const response = await apiClient.getProfile();
+      if (response.profile?.language) {
+        setUserLanguage(response.profile.language);
+      }
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+    }
+  };
 
   useEffect(() => {
     if (filterType === "all") {
@@ -343,7 +356,15 @@ export default function Activities() {
               <div className="space-y-4 py-4">
                 {/* Voice Recording Section */}
                 <div className="space-y-2">
-                  <Label>Voice Recording (Recommended)</Label>
+                  <div className="flex items-center justify-between">
+                    <Label>Voice Recording (Recommended)</Label>
+                    <Badge variant="outline" className="flex items-center gap-1.5 px-3 py-1">
+                      <Globe className="h-3 w-3" />
+                      <span className="text-xs font-medium">
+                        {userLanguage === "kn" ? "ಕನ್ನಡ" : userLanguage === "mr" ? "मराठी" : "English"}
+                      </span>
+                    </Badge>
+                  </div>
                   <div className="flex items-center gap-4">
                     <Button
                       type="button"
@@ -352,6 +373,7 @@ export default function Activities() {
                       size="lg"
                       className="flex-1"
                       disabled={processing}
+                      title={`Record in ${userLanguage === "kn" ? "Kannada" : userLanguage === "mr" ? "Marathi" : "English"}`}
                     >
                       {processing ? (
                         <>
@@ -373,7 +395,7 @@ export default function Activities() {
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {isRecording 
-                      ? "Recording... Speak your farming activity clearly. Click again to stop."
+                      ? `Recording in ${userLanguage === "kn" ? "Kannada (ಕನ್ನಡ)" : userLanguage === "mr" ? "Marathi (मराठी)" : "English"}... Speak your farming activity clearly. Click again to stop.`
                       : "Click to record your voice. The system will automatically transcribe and extract activity details."}
                   </p>
                 </div>

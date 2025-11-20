@@ -1,9 +1,11 @@
 import { useEffect, useState, useRef } from "react";
 import { useAuthContext } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
 import { apiClient } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Coins, TrendingUp, Calendar, Mic, MessageCircle, Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Coins, TrendingUp, Calendar, Mic, MessageCircle, Loader2, Globe } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { toast } from "@/hooks/use-toast";
 
@@ -18,6 +20,7 @@ interface Activity {
 
 export default function Dashboard() {
   const { user } = useAuthContext();
+  const navigate = useNavigate();
   const [credits, setCredits] = useState<number>(0);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [weeklyStats, setWeeklyStats] = useState({ activities: 0, credits: 0 });
@@ -27,6 +30,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [location, setLocation] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
+  const [userLanguage, setUserLanguage] = useState<string>("en");
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -35,8 +39,20 @@ export default function Dashboard() {
   useEffect(() => {
     if (user) {
       fetchDashboardData();
+      fetchUserProfile();
     }
   }, [user]);
+
+  const fetchUserProfile = async () => {
+    try {
+      const response = await apiClient.getProfile();
+      if (response.profile?.language) {
+        setUserLanguage(response.profile.language);
+      }
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+    }
+  };
 
   const fetchDashboardData = async () => {
     try {
@@ -292,11 +308,6 @@ export default function Dashboard() {
     };
   }, []);
 
-  const handleWhatsAppClick = () => {
-    const phoneNumber = "1234567890"; // Replace with actual WhatsApp bot number
-    const message = "Hello! I need help with sustainable farming.";
-    window.open(`https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`, '_blank');
-  };
 
   if (loading) {
     return (
@@ -313,13 +324,22 @@ export default function Dashboard() {
           <h1 className="text-3xl font-heading font-bold text-foreground">Dashboard</h1>
           <p className="text-muted-foreground mt-1">Track your sustainability journey</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="flex items-center gap-1.5 px-3 py-1.5">
+              <Globe className="h-3 w-3" />
+              <span className="text-xs font-medium">
+                {userLanguage === "kn" ? "ಕನ್ನಡ" : userLanguage === "mr" ? "मराठी" : "English"}
+              </span>
+            </Badge>
+          </div>
           <Button
             onClick={handleVoiceInput}
             variant={isRecording ? "destructive" : "outline"}
             size="icon"
             className="h-12 w-12"
             disabled={isProcessing}
+            title={`Record in ${userLanguage === "kn" ? "Kannada" : userLanguage === "mr" ? "Marathi" : "English"}`}
           >
             {isProcessing ? (
               <Loader2 className="h-5 w-5 animate-spin" />
@@ -328,7 +348,7 @@ export default function Dashboard() {
             )}
           </Button>
           <Button
-            onClick={handleWhatsAppClick}
+            onClick={() => navigate('/whatsapp-demo')}
             variant="outline"
             size="icon"
             className="h-12 w-12"

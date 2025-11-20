@@ -13,6 +13,7 @@ import Activities from "./pages/Activities";
 import Marketplace from "./pages/Marketplace";
 import Reports from "./pages/Reports";
 import Profile from "./pages/Profile";
+import WhatsAppDemo from "./pages/WhatsAppDemo";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -59,6 +60,13 @@ const App = () => (
                 <ProtectedRoute>
                   <AppLayout>
                     <Profile />
+                  </AppLayout>
+                </ProtectedRoute>
+              } />
+              <Route path="/whatsapp-demo" element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <WhatsAppDemo />
                   </AppLayout>
                 </ProtectedRoute>
               } />

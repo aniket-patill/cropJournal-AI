@@ -4,11 +4,47 @@ import fetch from 'node-fetch';
 import { AppError } from '../utils/errors';
 
 /**
+ * Map language code to Sarvam AI format
+ * Converts profile language codes ('en', 'kn') to Sarvam AI format ('en-IN', 'kn-IN')
+ */
+function mapLanguageCode(languageCode?: string | null): string | null {
+  if (!languageCode) {
+    return null;
+  }
+
+  // Map common language codes to Sarvam AI format
+  const languageMap: Record<string, string> = {
+    'en': 'en-IN',
+    'kn': 'kn-IN',
+    'hi': 'hi-IN',
+    'ta': 'ta-IN',
+    'te': 'te-IN',
+    'ml': 'ml-IN',
+    'mr': 'mr-IN',
+    'bn': 'bn-IN',
+    'gu': 'gu-IN',
+    'pa': 'pa-IN',
+    'ur': 'ur-IN',
+  };
+
+  // If already in Sarvam format, return as is
+  if (languageCode.includes('-')) {
+    return languageCode;
+  }
+
+  // Map to Sarvam format
+  return languageMap[languageCode.toLowerCase()] || null;
+}
+
+/**
  * Transcribe audio using Sarvam AI API
  * Supports various audio formats: webm, mp3, wav, m4a
  * Sarvam AI is optimized for Indian languages including Hindi, Kannada, etc.
+ * 
+ * @param audioFilePath - Path to the audio file to transcribe
+ * @param languageCode - Optional language code from user profile ('en', 'kn', etc.) or Sarvam format ('en-IN', 'kn-IN')
  */
-export async function transcribeAudio(audioFilePath: string): Promise<string> {
+export async function transcribeAudio(audioFilePath: string, languageCode?: string | null): Promise<string> {
   try {
     const sarvamApiKey = process.env.SARVAM_API_KEY;
     
@@ -37,12 +73,29 @@ export async function transcribeAudio(audioFilePath: string): Promise<string> {
       contentType: mimeType,
     });
     
-    // Optional: Add language parameter - Sarvam AI supports Indian languages
-    // Options: 'en-IN' (English), 'hi-IN' (Hindi), 'kn-IN' (Kannada), 'unknown' (auto-detect), etc.
-    const language = process.env.SARVAM_LANGUAGE;
-    if (language) {
-      formData.append('language_code', language);
+    // Determine language code: use provided parameter, then env variable, then default
+    let sarvamLanguage: string | null = null;
+    
+    if (languageCode) {
+      sarvamLanguage = mapLanguageCode(languageCode);
     }
+    
+    // Fallback to environment variable
+    if (!sarvamLanguage) {
+      const envLanguage = process.env.SARVAM_LANGUAGE;
+      if (envLanguage) {
+        sarvamLanguage = mapLanguageCode(envLanguage) || envLanguage;
+      }
+    }
+    
+    // Default to English if nothing specified
+    if (!sarvamLanguage) {
+      sarvamLanguage = 'en-IN';
+    }
+    
+    // Add language parameter - Sarvam AI supports Indian languages
+    // Options: 'en-IN' (English), 'hi-IN' (Hindi), 'kn-IN' (Kannada), 'unknown' (auto-detect), etc.
+    formData.append('language_code', sarvamLanguage);
     
     // Optional: Specify model (default is saarika:v2.5)
     const model = process.env.SARVAM_MODEL;
@@ -65,6 +118,7 @@ export async function transcribeAudio(audioFilePath: string): Promise<string> {
       hasKey: !!sarvamApiKey,
       fileName: fileName,
       fileSize: audioBuffer.length,
+      languageCode: sarvamLanguage,
     });
     
     const response = await fetch(sarvamApiUrl, {

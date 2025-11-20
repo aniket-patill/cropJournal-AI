@@ -12,6 +12,7 @@ import creditsRouter from './routes/credits';
 import profileRouter from './routes/profile';
 import dashboardRouter from './routes/dashboard';
 import reportsRouter from './routes/reports';
+import demoRouter from './routes/demo';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -61,6 +62,7 @@ app.use('/api/credits', creditsRouter);
 app.use('/api/profile', profileRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/reports', reportsRouter);
+app.use('/api', demoRouter);
 
 // Error handling
 app.use(errorHandler);

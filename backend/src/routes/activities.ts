@@ -3,10 +3,11 @@ import { requireAuth } from '../middleware/auth';
 import { upload } from '../middleware/upload';
 import { getSupabaseClient } from '../lib/supabase';
 import { transcribeAudio } from '../services/speechToText';
-import { extractActivityData } from '../services/nlpExtraction';
+import { extractActivityData, isValidFarmingExtraction } from '../services/nlpExtraction';
 import { calculateCredits } from '../services/creditCalculator';
 import { verifyActivity } from '../services/verification';
 import { analyzeAudio } from '../services/audioAnalysis';
+import { isValidFarmingContent, calculateContentQualityScore } from '../services/contentValidation';
 import { AppError } from '../utils/errors';
 import fs from 'fs';
 
@@ -68,6 +69,24 @@ router.post('/log-activity',
       throw new AppError('Audio recording or description is required', 400);
     }
 
+    // Fetch user profile to get language preference
+    const supabase = getSupabaseClient();
+    let userLanguage: string | null = null;
+    try {
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('language')
+        .eq('id', userId)
+        .single();
+      
+      if (!profileError && profile?.language) {
+        userLanguage = profile.language;
+      }
+    } catch (profileError) {
+      // If profile doesn't exist or error fetching, default to null (will use default language)
+      console.warn('Could not fetch user profile for language preference:', profileError);
+    }
+
     let rawText = description || '';
     let transcription = null;
     let audioAnalysisResult = null;
@@ -92,8 +111,8 @@ router.post('/log-activity',
           console.warn('Audio quality warning:', audioAnalysisResult.reasons.join(', '));
         }
 
-        // Transcribe audio
-        transcription = await transcribeAudio(audioFile.path);
+        // Transcribe audio with user's language preference
+        transcription = await transcribeAudio(audioFile.path, userLanguage);
         rawText = transcription;
 
         if (!rawText || rawText.trim() === '') {
@@ -122,7 +141,22 @@ router.post('/log-activity',
       throw new AppError('Description or valid audio transcription is required', 400);
     }
 
-    // Step 3: Extract structured data using NLP
+    // Step 3: Validate content quality before processing
+    const qualityScore = calculateContentQualityScore(rawText);
+    const isValidContent = isValidFarmingContent(rawText);
+
+    if (!isValidContent) {
+      // Clean up audio file on validation error
+      if (audioFile && fs.existsSync(audioFile.path)) {
+        fs.unlinkSync(audioFile.path);
+      }
+      throw new AppError(
+        'Please provide a meaningful description of your farming activity. Your input is too short, meaningless, or does not appear to be related to farming.',
+        400
+      );
+    }
+
+    // Step 4: Extract structured data using NLP
     let extractedData;
     try {
       extractedData = await extractActivityData(rawText);
@@ -133,16 +167,26 @@ router.post('/log-activity',
       if (description && !audioFile) extractedData.description = description;
     } catch (error: any) {
       console.error('NLP extraction error:', error);
-      // Fallback to manual inputs
-      extractedData = {
-        activity_type: (req.body.activity_type as any) || 'other',
-        crop_name: crop || null,
-        area: area || null,
-        description: description || rawText.substring(0, 200),
-      };
+      // Clean up audio file on error
+      if (audioFile && fs.existsSync(audioFile.path)) {
+        fs.unlinkSync(audioFile.path);
+      }
+      throw new AppError('Failed to process your activity description. Please provide a clearer description.', 400);
     }
 
-    // Step 4: Verify activity (anti-fraud checks)
+    // Step 5: Validate extracted data indicates farming content
+    if (!isValidFarmingExtraction(extractedData)) {
+      // Clean up audio file on validation error
+      if (audioFile && fs.existsSync(audioFile.path)) {
+        fs.unlinkSync(audioFile.path);
+      }
+      throw new AppError(
+        'The provided content does not appear to describe a farming activity. Please describe an actual sustainable farming practice.',
+        400
+      );
+    }
+
+    // Step 6: Verify activity (anti-fraud checks)
     const locationData = latitude && longitude ? {
       latitude: parseFloat(latitude),
       longitude: parseFloat(longitude),
@@ -174,11 +218,26 @@ router.post('/log-activity',
       );
     }
 
-    // Step 5: Calculate credits
-    const creditsEarned = calculateCredits(extractedData);
+    // Step 7: Calculate credits with quality score
+    const creditsEarned = calculateCredits(extractedData, {
+      qualityScore,
+      requireFarmingContent: true,
+    });
 
-    // Step 6: Save to database with verification data
-    const supabase = getSupabaseClient();
+    // If credits are 0 after validation, it means content didn't pass quality checks
+    if (creditsEarned === 0) {
+      // Clean up audio file
+      if (audioFile && fs.existsSync(audioFile.path)) {
+        fs.unlinkSync(audioFile.path);
+      }
+      throw new AppError(
+        'Unable to award credits. Please provide a more detailed description of your farming activity.',
+        400
+      );
+    }
+
+    // Step 8: Save to database with verification data
+    // Note: supabase client was already initialized above for profile fetch
     const activityData = {
       user_id: userId,
       description: extractedData.description,
