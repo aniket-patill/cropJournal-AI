@@ -5,6 +5,7 @@ import { transcribeAudio } from '../services/speechToText';
 import { extractActivityData, isValidFarmingExtraction } from '../services/nlpExtraction';
 import { calculateCredits } from '../services/creditCalculator';
 import { isValidFarmingContent, calculateContentQualityScore } from '../services/contentValidation';
+import { getSupabaseClient } from '../lib/supabase';
 import { AppError } from '../utils/errors';
 import fs from 'fs';
 
@@ -56,18 +57,37 @@ router.post(
 
     try {
       const { text } = req.body;
+      const userId = req.userId!;
 
       // Validate input - require audio OR text
       if (!audioFile && (!text || text.trim() === '')) {
         throw new AppError('Text message or audio file is required', 400);
       }
 
+      // Fetch user profile to get language preference
+      const supabase = getSupabaseClient();
+      let userLanguage: string | null = null;
+      try {
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('language')
+          .eq('id', userId)
+          .single();
+        
+        if (!profileError && profile?.language) {
+          userLanguage = profile.language;
+        }
+      } catch (profileError) {
+        // If profile doesn't exist or error fetching, default to null (will use default language)
+        console.warn('Could not fetch user profile for language preference:', profileError);
+      }
+
       let rawText = text || '';
 
-      // Step 1: If audio file provided, transcribe it
+      // Step 1: If audio file provided, transcribe it with user language
       if (audioFile) {
         try {
-          transcription = await transcribeAudio(audioFile.path);
+          transcription = await transcribeAudio(audioFile.path, userLanguage);
           rawText = transcription;
 
           if (!rawText || rawText.trim() === '') {

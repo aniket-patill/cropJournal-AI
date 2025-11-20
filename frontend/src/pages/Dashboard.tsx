@@ -1,11 +1,12 @@
 import { useEffect, useState, useRef } from "react";
 import { useAuthContext } from "@/contexts/AuthContext";
-import { useNavigate } from "react-router-dom";
 import { apiClient } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Coins, TrendingUp, Calendar, Mic, MessageCircle, Loader2, Globe } from "lucide-react";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { WhatsAppChat } from "@/components/WhatsAppChat";
+import { Coins, TrendingUp, Calendar, Mic, MessageCircle, Loader2, Globe, X } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { toast } from "@/hooks/use-toast";
 
@@ -20,7 +21,6 @@ interface Activity {
 
 export default function Dashboard() {
   const { user } = useAuthContext();
-  const navigate = useNavigate();
   const [credits, setCredits] = useState<number>(0);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [weeklyStats, setWeeklyStats] = useState({ activities: 0, credits: 0 });
@@ -31,10 +31,14 @@ export default function Dashboard() {
   const [location, setLocation] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [userLanguage, setUserLanguage] = useState<string>("en");
+  const [whatsappOpen, setWhatsappOpen] = useState(false);
+  const [recordingTime, setRecordingTime] = useState<number>(0);
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
+  const recordingStartTimeRef = useRef<number>(0);
+  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -140,6 +144,11 @@ export default function Dashboard() {
         // This ensures all chunks are collected
       }
       setIsRecording(false);
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+      setRecordingTime(0);
       return;
     }
 
@@ -234,6 +243,13 @@ export default function Dashboard() {
       // timeslice: 1000ms means we get chunks every second
       mediaRecorder.start(1000);
       setIsRecording(true);
+      recordingStartTimeRef.current = Date.now();
+      setRecordingTime(0);
+      
+      // Start timer for display
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingTime(Math.floor((Date.now() - recordingStartTimeRef.current) / 1000));
+      }, 100);
       
       toast({
         title: "Recording started",
@@ -305,6 +321,9 @@ export default function Dashboard() {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+      }
     };
   }, []);
 
@@ -333,27 +352,73 @@ export default function Dashboard() {
               </span>
             </Badge>
           </div>
+          {isRecording ? (
+            /* WhatsApp-style Recording UI */
+            <div className="flex items-center gap-3 px-4 py-2 bg-destructive/10 border border-destructive/20 rounded-lg">
+              <div className="w-10 h-10 rounded-full bg-destructive flex items-center justify-center">
+                <div className="w-3 h-3 bg-white rounded-full animate-pulse" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-1">
+                    {[...Array(5)].map((_, i) => (
+                      <div
+                        key={i}
+                        className="w-1 bg-destructive rounded-full animate-pulse"
+                        style={{
+                          height: `${8 + Math.random() * 12}px`,
+                          animationDelay: `${i * 0.1}s`,
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <span className="text-sm text-destructive font-medium">
+                    {recordingTime}s
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">Recording...</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleVoiceInput}
+                  className="text-destructive hover:bg-destructive/10 h-8 w-8"
+                  title="Stop & Send"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button
+              onClick={handleVoiceInput}
+              variant="outline"
+              className="h-12 px-4 gap-2"
+              disabled={isProcessing}
+              title={`Record in ${userLanguage === "kn" ? "Kannada" : userLanguage === "mr" ? "Marathi" : "English"}`}
+            >
+              {isProcessing ? (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <span className="hidden sm:inline">Processing...</span>
+                </>
+              ) : (
+                <>
+                  <Mic className="h-5 w-5" />
+                  <span className="hidden sm:inline">Voice Input</span>
+                </>
+              )}
+            </Button>
+          )}
           <Button
-            onClick={handleVoiceInput}
-            variant={isRecording ? "destructive" : "outline"}
-            size="icon"
-            className="h-12 w-12"
-            disabled={isProcessing}
-            title={`Record in ${userLanguage === "kn" ? "Kannada" : userLanguage === "mr" ? "Marathi" : "English"}`}
-          >
-            {isProcessing ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <Mic className={`h-5 w-5 ${isRecording ? 'animate-pulse' : ''}`} />
-            )}
-          </Button>
-          <Button
-            onClick={() => navigate('/whatsapp-demo')}
+            onClick={() => setWhatsappOpen(true)}
             variant="outline"
-            size="icon"
-            className="h-12 w-12"
+            className="h-12 px-4 gap-2"
           >
             <MessageCircle className="h-5 w-5" />
+            <span className="hidden sm:inline">WhatsApp Bot</span>
           </Button>
         </div>
       </div>
@@ -457,6 +522,37 @@ export default function Dashboard() {
           )}
         </CardContent>
       </Card>
+
+      {/* WhatsApp Bot Sheet */}
+      <Sheet open={whatsappOpen} onOpenChange={setWhatsappOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-sm p-0 flex flex-col overflow-hidden">
+          {/* WhatsApp-like Header */}
+          <div className="bg-[#075E54] text-white px-4 py-3 flex items-center justify-between shadow-md">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+                <MessageCircle className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base">KrishiLog</h3>
+                <p className="text-xs text-white/80">Online</p>
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-white hover:bg-white/20 h-8 w-8"
+              onClick={() => setWhatsappOpen(false)}
+            >
+              <X className="h-5 w-5" />
+            </Button>
+          </div>
+
+          {/* Chat Container - Full height minus header */}
+          <div className="flex-1 overflow-hidden bg-[#ECE5DD] min-h-0">
+            <WhatsAppChat />
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

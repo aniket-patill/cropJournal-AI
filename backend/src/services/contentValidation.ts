@@ -212,3 +212,4 @@ export function extractFarmingKeywords(text: string): string[] {
   return FARMING_KEYWORDS.filter(keyword => lowerText.includes(keyword));
 }
 
+
