@@ -1,5 +1,8 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { Database } from '../../frontend/src/integrations/supabase/types';
+
+// Temporary fallback type for Database if import is missing or fails.
+// Remove this when the correct type is available.
+type Database = any;
 
 let supabaseClient: SupabaseClient<Database> | null = null;
 
